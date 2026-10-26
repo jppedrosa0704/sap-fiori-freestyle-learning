@@ -13,6 +13,7 @@ public section.
      CLIENTEID type I,
      TOTALITENS type P length 8 decimals 2,
      TOTALFRETE type P length 8 decimals 2,
+     TOTALORDEM type P length 8 decimals 2,
      STATUS type string,
   end of TS_OVCAB. .
   types:
@@ -379,6 +380,7 @@ lo_entity_type = model->create_entity_type( iv_entity_type_name = 'OVCab' iv_def
 ***********************************************************************************************************************************
 
 lo_property = lo_entity_type->create_property( iv_property_name = 'OrdemId' iv_abap_fieldname = 'ORDEMID' ). "#EC NOTEXT
+lo_property->set_label_from_text_element( iv_text_element_symbol = '029' iv_text_element_container = gc_incl_name ).  "#EC NOTEXT
 lo_property->set_is_key( ).
 lo_property->set_type_edm_int32( ).
 lo_property->set_creatable( abap_false ).
@@ -423,6 +425,16 @@ lo_property->set_nullable( abap_false ).
 lo_property->set_filterable( abap_false ).
 lo_property = lo_entity_type->create_property( iv_property_name = 'TotalFrete' iv_abap_fieldname = 'TOTALFRETE' ). "#EC NOTEXT
 lo_property->set_label_from_text_element( iv_text_element_symbol = '005' iv_text_element_container = gc_incl_name ).  "#EC NOTEXT
+lo_property->set_type_edm_decimal( ).
+lo_property->set_precison( iv_precision = 2 ). "#EC NOTEXT
+lo_property->set_maxlength( iv_max_length = 15 ). "#EC NOTEXT
+lo_property->set_creatable( abap_false ).
+lo_property->set_updatable( abap_false ).
+lo_property->set_sortable( abap_false ).
+lo_property->set_nullable( abap_false ).
+lo_property->set_filterable( abap_false ).
+lo_property = lo_entity_type->create_property( iv_property_name = 'TotalOrdem' iv_abap_fieldname = 'TOTALORDEM' ). "#EC NOTEXT
+lo_property->set_label_from_text_element( iv_text_element_symbol = '030' iv_text_element_container = gc_incl_name ).  "#EC NOTEXT
 lo_property->set_type_edm_decimal( ).
 lo_property->set_precison( iv_precision = 2 ). "#EC NOTEXT
 lo_property->set_maxlength( iv_max_length = 15 ). "#EC NOTEXT
@@ -580,7 +592,7 @@ lo_entity_set->set_filter_required( abap_false ).
 *&---------------------------------------------------------------------*
 
 
-  CONSTANTS: lc_gen_date_time TYPE timestamp VALUE '20261026072429'.                  "#EC NOTEXT
+  CONSTANTS: lc_gen_date_time TYPE timestamp VALUE '20261026125834'.                  "#EC NOTEXT
   rv_last_modified = super->get_last_modified( ).
   IF rv_last_modified LT lc_gen_date_time.
     rv_last_modified = lc_gen_date_time.
@@ -602,6 +614,13 @@ DATA:
      ls_text_element TYPE ts_text_element.                                 "#EC NEEDED
 
 
+clear ls_text_element.
+ls_text_element-artifact_name          = 'OrdemId'.                 "#EC NOTEXT
+ls_text_element-artifact_type          = 'PROP'.                                       "#EC NOTEXT
+ls_text_element-parent_artifact_name   = 'OVCab'.                            "#EC NOTEXT
+ls_text_element-parent_artifact_type   = 'ETYP'.                                       "#EC NOTEXT
+ls_text_element-text_symbol            = '029'.              "#EC NOTEXT
+APPEND ls_text_element TO rt_text_elements.
 clear ls_text_element.
 ls_text_element-artifact_name          = 'DataCriacao'.                 "#EC NOTEXT
 ls_text_element-artifact_type          = 'PROP'.                                       "#EC NOTEXT
@@ -636,6 +655,13 @@ ls_text_element-artifact_type          = 'PROP'.                                
 ls_text_element-parent_artifact_name   = 'OVCab'.                            "#EC NOTEXT
 ls_text_element-parent_artifact_type   = 'ETYP'.                                       "#EC NOTEXT
 ls_text_element-text_symbol            = '005'.              "#EC NOTEXT
+APPEND ls_text_element TO rt_text_elements.
+clear ls_text_element.
+ls_text_element-artifact_name          = 'TotalOrdem'.                 "#EC NOTEXT
+ls_text_element-artifact_type          = 'PROP'.                                       "#EC NOTEXT
+ls_text_element-parent_artifact_name   = 'OVCab'.                            "#EC NOTEXT
+ls_text_element-parent_artifact_type   = 'ETYP'.                                       "#EC NOTEXT
+ls_text_element-text_symbol            = '030'.              "#EC NOTEXT
 APPEND ls_text_element TO rt_text_elements.
 clear ls_text_element.
 ls_text_element-artifact_name          = 'Status'.                 "#EC NOTEXT
