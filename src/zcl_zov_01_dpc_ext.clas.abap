@@ -348,9 +348,71 @@ METHOD ovcabset_get_entityset.
 ENDMETHOD.
 
 
-  method OVCABSET_UPDATE_ENTITY.
+METHOD ovcabset_update_entity.
 
-  endmethod.
+  " Obtém o container de mensagens do SAP Gateway
+  " Será utilizado para devolver mensagens de erro ao consumidor OData
+  DATA(lo_msg) = me->/iwbep/if_mgw_conv_srv_runtime~get_message_container( ).
+
+  "====================================================================
+  " Leitura dos dados enviados no corpo (payload) da requisição HTTP
+  "====================================================================
+
+  " Converte automaticamente o payload JSON/XML recebido
+  " para a estrutura da entidade OData
+  io_data_provider->read_entry_data(
+    IMPORTING
+      es_data = er_entity
+  ).
+
+  "====================================================================
+  " Leitura da chave da URL
+  "====================================================================
+
+  " Recupera o valor da chave OrdemId enviada na URL
+  " Exemplo:
+  " /OVCabSet('1001')
+  "
+  " Como normalmente a chave não é enviada no payload,
+  " garantimos que ela é preenchida a partir da URL
+  er_entity-ordemid = it_key_tab[ name = 'OrdemId' ]-value.
+
+  "====================================================================
+  " Atualização do registro na tabela ZOVCAB
+  "====================================================================
+
+  " Atualiza os campos da ordem na base de dados
+  UPDATE zovcab
+    SET clienteid = er_entity-clienteid
+        totalitens = er_entity-totalitens
+        totalfrete = er_entity-totalfrete
+        totalordem = er_entity-totalordem
+        status     = er_entity-status
+    WHERE ordemid = er_entity-ordemid.
+
+  "====================================================================
+  " Validação da atualização
+  "====================================================================
+
+  " Se ocorreu algum erro durante a atualização
+  IF sy-subrc <> 0.
+
+    " Adiciona mensagem de erro ao container
+    lo_msg->add_message_text_only(
+      EXPORTING
+        iv_msg_type = 'E'
+        iv_msg_text = 'Erro ao atualizar ordem'
+    ).
+
+    " Dispara exceção de negócio para devolver
+    " a mensagem ao consumidor do serviço OData
+    RAISE EXCEPTION TYPE /iwbep/cx_mgw_busi_exception
+      EXPORTING
+        message_container = lo_msg.
+
+  ENDIF.
+
+ENDMETHOD.
 
 
   method OVITEMSET_CREATE_ENTITY.
@@ -535,7 +597,50 @@ method OVITEMSET_GET_ENTITYSET.
 endmethod.
 
 
-  method OVITEMSET_UPDATE_ENTITY.
+METHOD ovitemset_update_entity.
 
-  endmethod.
+  " Obtém o container de mensagens do Gateway
+  DATA(lo_msg) = me->/iwbep/if_mgw_conv_srv_runtime~get_message_container( ).
+
+  " Lê os dados enviados no body da requisição (PUT/MERGE)
+  io_data_provider->read_entry_data(
+    IMPORTING
+      es_data = er_entity
+  ).
+
+  " Recupera as chaves enviadas na URL
+  er_entity-ordemid = it_key_tab[ name = 'OrdemId' ]-value. " Id da ordem
+  er_entity-itemid  = it_key_tab[ name = 'ItemId'  ]-value. " Id do item
+
+  " Recalcula o preço total do item
+  er_entity-precotot = er_entity-quantidade * er_entity-precouni.
+
+  " Atualiza os dados do item na tabela ZOVITEM
+  UPDATE zovitem
+    SET material   = er_entity-material     " Código do material
+        descricao  = er_entity-descricao    " Descrição do item
+        quantidade = er_entity-quantidade   " Quantidade solicitada
+        precouni   = er_entity-precouni     " Preço unitário
+        precotot   = er_entity-precotot     " Preço total calculado
+    WHERE ordemid = er_entity-ordemid      " Ordem a atualizar
+          AND itemid = er_entity-itemid.
+
+  " Verifica se ocorreu erro na atualização
+  IF sy-subrc <> 0.
+
+    " Adiciona mensagem de erro ao retorno OData
+    lo_msg->add_message_text_only(
+      EXPORTING
+        iv_msg_type = 'E'
+        iv_msg_text = 'Erro ao atualizar o item'
+    ).
+
+    " Lança exceção para devolver a mensagem ao consumidor do serviço
+    RAISE EXCEPTION TYPE /iwbep/cx_mgw_busi_exception
+      EXPORTING
+        message_container = lo_msg.
+
+  ENDIF.
+
+ENDMETHOD.
 ENDCLASS.
