@@ -229,32 +229,123 @@ METHOD ovcabset_get_entity.
 ENDMETHOD.
 
 
-  method OVCABSET_GET_ENTITYSET.
+METHOD ovcabset_get_entityset.
 
-    DATA: lt_cab       TYPE STANDARD TABLE OF zovcab.
-    DATA: ls_cab       TYPE zovcab.
-    DATA: ls_entityset LIKE LINE OF et_entityset.
+  " Tabela interna para armazenar os registos retornados da ZOVCAB
+  DATA: lt_cab TYPE STANDARD TABLE OF zovcab.
 
-    SELECT *
-      INTO TABLE lt_cab
-      FROM zovcab.
+  " Estrutura de trabalho para percorrer os registos da ZOVCAB
+  DATA: ls_cab TYPE zovcab.
 
-      LOOP AT  lt_cab INTO ls_cab.
-        CLEAR ls_entityset.
-        MOVE-CORRESPONDING ls_cab TO ls_entityset.
+  " Estrutura correspondente a uma linha da entidade de saída
+  DATA: ls_entityset LIKE LINE OF et_entityset.
 
-        ls_entityset-CriadoPor = ls_cab-criacao_usuario.
+  " Tabela utilizada para montar dinamicamente o ORDER BY
+  DATA: lt_orderby TYPE STANDARD TABLE OF string.
 
-        CONVERT
-          DATE ls_cab-criacao_data
-          TIME ls_cab-criacao_hora
-          INTO TIME STAMP ls_entityset-datacriacao
-          TIME ZONE sy-zonlo.
+  " String final contendo a cláusula ORDER BY
+  DATA: ld_orderby TYPE string.
 
-        APPEND ls_entityset TO et_entityset.
-      ENDLOOP.
+  "====================================================================
+  " Montagem dinâmica da cláusula ORDER BY
+  "====================================================================
 
-  endmethod.
+  " Percorre os campos de ordenação enviados pelo consumidor OData
+  LOOP AT it_order INTO DATA(ls_order).
+
+    " Converte o nome da propriedade para maiúsculas
+    TRANSLATE ls_order-property TO UPPER CASE.
+
+    " Converte o tipo de ordenação para maiúsculas
+    TRANSLATE ls_order-order TO UPPER CASE.
+
+    " Ajusta o valor conforme a sintaxe esperada pelo ABAP Open SQL
+    IF ls_order-order = 'DESC'.
+
+      ls_order-order = 'DESCENDING'.
+
+    ELSE.
+
+      ls_order-order = 'ASCENDING'.
+
+    ENDIF.
+
+    " Monta uma linha de ordenação
+    " Exemplo:
+    " ORDEMID ASCENDING
+    " DATA_CRIACAO DESCENDING
+    APPEND |{ ls_order-property } { ls_order-order }|
+        TO lt_orderby.
+
+  ENDLOOP.
+
+  " Concatena todas as regras de ordenação numa única string
+  " Exemplo:
+  " ORDEMID ASCENDING, DATACRIACAO DESCENDING
+  CONCATENATE LINES OF lt_orderby
+         INTO ld_orderby
+    SEPARATED BY ', '.
+
+  "====================================================================
+  " Define ordenação padrão caso nenhuma tenha sido enviada
+  "====================================================================
+
+  IF ld_orderby = ''.
+
+    " Ordenação obrigatória para evitar erro em paginação
+    ld_orderby = 'OrdemId ASCENDING'.
+
+  ENDIF.
+
+* Código antigo sem paginação
+*
+* SELECT *
+*   INTO TABLE lt_cab
+*   FROM zovcab
+*   WHERE (iv_filter_string)
+*   ORDER BY (ld_orderby).
+
+  "====================================================================
+  " Consulta da tabela utilizando filtros, ordenação e paginação
+  "====================================================================
+
+  SELECT *
+    FROM zovcab
+    WHERE (iv_filter_string)
+    ORDER BY (ld_orderby)
+    INTO TABLE @lt_cab
+    UP TO @is_paging-top ROWS
+    OFFSET @is_paging-skip.
+
+  "====================================================================
+  " Conversão dos dados da tabela para a entidade OData
+  "====================================================================
+
+  LOOP AT lt_cab INTO ls_cab.
+
+    " Limpa a estrutura de saída
+    CLEAR ls_entityset.
+
+    " Copia os campos de mesmo nome da estrutura SAP
+    " para a estrutura da entidade OData
+    MOVE-CORRESPONDING ls_cab TO ls_entityset.
+
+    " Preenchimento manual de campos específicos
+    ls_entityset-criadopor = ls_cab-criacao_usuario.
+
+    " Converte Data + Hora SAP para Timestamp
+    CONVERT
+      DATE ls_cab-criacao_data
+      TIME ls_cab-criacao_hora
+      INTO TIME STAMP ls_entityset-datacriacao
+      TIME ZONE sy-zonlo.
+
+    " Adiciona o registo à tabela de retorno do serviço
+    APPEND ls_entityset TO et_entityset.
+
+  ENDLOOP.
+
+ENDMETHOD.
 
 
   method OVCABSET_UPDATE_ENTITY.
