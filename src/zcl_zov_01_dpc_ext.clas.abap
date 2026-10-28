@@ -138,9 +138,83 @@ METHOD ovcabset_create_entity.
 ENDMETHOD.
 
 
-  method OVCABSET_DELETE_ENTITY.
+METHOD ovcabset_delete_entity.
 
-  endmethod.
+* Estrutura para armazenar uma chave recebida na URI
+  DATA: ls_key_tab LIKE LINE OF it_key_tab.
+
+* Obtém o contentor de mensagens OData.
+* Será usado para devolver mensagens de erro ao consumidor do serviço.
+  DATA(lo_msg) = me->/iwbep/if_mgw_conv_srv_runtime~get_message_container( ).
+
+* Procura na tabela de chaves o campo OrdemId enviado na URI.
+* Exemplo:
+* /OVCabSet(3)
+  READ TABLE it_key_tab INTO ls_key_tab
+       WITH KEY name = 'OrdemId'.
+
+* Se o campo OrdemId não existir na URI,
+* gera uma mensagem de erro e interrompe o processamento.
+  IF sy-subrc <> 0.
+
+    lo_msg->add_message_text_only(
+      EXPORTING
+        iv_msg_type = 'E'
+        iv_msg_text = 'Ordem ID Não encontrado'
+    ).
+
+    RAISE EXCEPTION TYPE /iwbep/cx_mgw_busi_exception
+      EXPORTING
+        message_container = lo_msg.
+
+  ENDIF.
+
+* Remove todos os itens associados à ordem.
+* Primeiro elimina os registos da tabela de detalhe (ZOVITEM)
+* para evitar problemas de integridade referencial.
+  DELETE FROM zovitem
+    WHERE OrdemId = ls_key_tab-value.
+
+* Se não conseguiu eliminar os itens,
+* executa rollback e adiciona uma mensagem de erro.
+  IF sy-subrc <> 0.
+
+    ROLLBACK WORK.
+
+    lo_msg->add_message_text_only(
+      EXPORTING
+        iv_msg_type = 'E'
+        iv_msg_text = 'Item Não encontrado'
+    ).
+
+  ENDIF.
+
+* Remove o cabeçalho da ordem na tabela ZOVCAB.
+  DELETE FROM zovcab
+    WHERE OrdemId = ls_key_tab-value.
+
+* Se ocorrer erro ao remover o cabeçalho,
+* desfaz as alterações efetuadas e lança exceção.
+  IF sy-subrc <> 0.
+
+    ROLLBACK WORK.
+
+    lo_msg->add_message_text_only(
+      EXPORTING
+        iv_msg_type = 'E'
+        iv_msg_text = 'Erro ao remover ordem.'
+    ).
+
+    RAISE EXCEPTION TYPE /iwbep/cx_mgw_busi_exception
+      EXPORTING
+        message_container = lo_msg.
+
+  ENDIF.
+
+* Confirma definitivamente todas as eliminações realizadas.
+  COMMIT WORK AND WAIT.
+
+ENDMETHOD.
 
 
 METHOD ovcabset_get_entity.
@@ -456,9 +530,57 @@ ENDMETHOD.
   endmethod.
 
 
-  method OVITEMSET_DELETE_ENTITY.
+METHOD ovitemset_delete_entity.
 
-  endmethod.
+* Estrutura para armazenar os dados do item.
+* Utiliza o mesmo tipo da tabela ZOVITEM.
+  DATA: ls_item TYPE zovitem.
+
+* Estrutura para armazenar uma linha da tabela de chaves
+* recebida na URI da requisição OData.
+  DATA: ls_key_tab LIKE LINE OF it_key_tab.
+
+* Obtém o contentor de mensagens OData.
+* Será utilizado para retornar mensagens de erro ao consumidor.
+  DATA(lo_msg) = me->/iwbep/if_mgw_conv_srv_runtime~get_message_container( ).
+
+* Obtém o valor da chave OrdemId enviada na URI.
+* Exemplo:
+* /OVItemSet(OrdemId=3,ItemId=4)
+  ls_item-ordemid = it_key_tab[ name = 'OrdemId' ]-value.
+
+* Obtém o valor da chave ItemId enviada na URI.
+  ls_item-itemid = it_key_tab[ name = 'ItemId' ]-value.
+
+* Remove o item correspondente da tabela ZOVITEM.
+* A eliminação é feita utilizando a chave composta:
+* OrdemId + ItemId.
+  DELETE FROM zovitem
+    WHERE OrdemId = ls_item-ordemid
+      AND ItemId  = ls_item-itemid.
+
+* Verifica se ocorreu algum erro durante a eliminação.
+* Se SY-SUBRC for diferente de zero, o registo não foi removido.
+  IF sy-subrc <> 0.
+
+* Cancela a transação.
+    ROLLBACK WORK.
+
+* Adiciona uma mensagem de erro ao contentor.
+    lo_msg->add_message_text_only(
+      EXPORTING
+        iv_msg_type = 'E'
+        iv_msg_text = 'Erro ao remover o item'
+    ).
+
+* Lança uma exceção OData para devolver o erro ao cliente.
+    RAISE EXCEPTION TYPE /iwbep/cx_mgw_busi_exception
+      EXPORTING
+        message_container = lo_msg.
+
+  ENDIF.
+
+ENDMETHOD.
 
 
 METHOD ovitemset_get_entity.
