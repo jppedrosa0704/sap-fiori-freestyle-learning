@@ -563,6 +563,8 @@ ENDMETHOD.
 
 METHOD ovcabset_update_entity.
 
+  DATA: ld_error TYPE flag.
+
   " Obtém o container de mensagens do SAP Gateway
   " Será utilizado para devolver mensagens de erro ao consumidor OData
   DATA(lo_msg) = me->/iwbep/if_mgw_conv_srv_runtime~get_message_container( ).
@@ -590,6 +592,34 @@ METHOD ovcabset_update_entity.
   " garantimos que ela é preenchida a partir da URL
   er_entity-ordemid = it_key_tab[ name = 'OrdemId' ]-value.
 
+  IF  er_entity-CLIENTEID = 0.
+    ld_error = 'X'.
+    lo_msg->add_message_text_only(
+      EXPORTING
+        iv_msg_type = 'E'
+        iv_msg_text = 'Cliente Vazio.'
+    ).
+  ENDIF.
+
+  IF er_entity-totalordem < 10.
+    ld_error = 'X'.
+    lo_msg->add_message(
+      EXPORTING
+       iv_msg_type    = 'E'
+       iv_msg_id      = 'ZOV'
+       iv_msg_number  = 1
+       iv_msg_v1      = 'R$ 10,00'
+       iv_msg_v2      = |{ er_entity-ordemid }|
+    ).
+   ENDIF.
+
+   IF ld_error = 'X'.
+     RAISE EXCEPTION TYPE /IWBEP/CX_MGW_BUSI_EXCEPTION
+     EXPORTING
+       message_container = lo_msg
+       http_status_code = 400.
+
+   ENDIF.
   "====================================================================
   " Atualização do registro na tabela ZOVCAB
   "====================================================================
